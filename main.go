@@ -11,12 +11,16 @@ import (
 )
 
 func main() {
-	
 	var targets []*Target
-	targets = append(targets, &Target{Host: "www.google.com", Iface: "", Count: -1, Size: 24, TTL: 64, Timeout: time.Second*100000, Interval: time.Second})
-	targets = append(targets, &Target{Host: "localhost", Iface: "", Count: -1, Size: 24, TTL: 64, Timeout: time.Second*100000, Interval: time.Second})
-
+	targets = append(targets, NewTarget("www.google.com", ""))
+	targets = append(targets, NewTarget("localhost", ""))
 	monitor(targets)
+}
+
+type health struct {
+	consecutiveSuccesses int
+	consecutiveFailure   int
+	actionRunning        bool
 }
 
 type Target struct {
@@ -27,6 +31,20 @@ type Target struct {
 	TTL      int
 	Timeout  time.Duration
 	Interval time.Duration
+	health   health
+	mu       sync.Mutex
+}
+
+func NewTarget(host, iface string) *Target {
+	return &Target{
+		Host:     host,
+		Iface:    iface,
+		Count:    -1,
+		Size:     24,
+		TTL:      64,
+		Timeout:  time.Second * 100000,
+		Interval: time.Second,
+	}
 }
 
 func monitor(targets []*Target) {
@@ -49,8 +67,11 @@ func (t *Target) Probe() error {
 		return err
 	}
 
-	c := make(chan os.Signal, 1)
+	done := make(chan bool) // to stop ticker
+	defer close(done)
+	c := make(chan os.Signal, 1) // handle interrupt
 	signal.Notify(c, os.Interrupt)
+
 	go func() {
 		for range c {
 			pinger.Stop()
@@ -69,26 +90,52 @@ func (t *Target) Probe() error {
 			pkt.Nbytes, pkt.IPAddr, pkt.Seq, pkt.Rtt, pkt.TTL)
 	}
 
-	pinger.OnDuplicateRecv = func(pkt *probing.Packet) {
-		fmt.Printf("%d bytes from %s icmp_seq=%d time=%v ttl=%v (DUP!)\n",
-			pkt.Nbytes, pkt.IPAddr, pkt.Seq, pkt.Rtt, pkt.TTL)
-	}
+	// Check target
+	t.healthMonitor(pinger, done, time.Second*5)
 
-	pinger.OnFinish = func(stats *probing.Statistics) {
-		fmt.Printf("\n--- %s ping statistics ---\n", stats.Addr)
-		fmt.Printf("%d packets transmitted, %d packets received, %d duplicates, %v%% packet loss\n",
-			stats.PacketsSent, stats.PacketsRecv, stats.PacketsRecvDuplicates, stats.PacketLoss)
-		fmt.Printf("round-trip min/avg/max/stddev = %v/%v/%v/%v\n",
-			stats.MinRtt, stats.AvgRtt, stats.MaxRtt, stats.StdDevRtt)
-	}
-
-	fmt.Printf("Ping %s (%s):\n", pinger.Addr(), pinger.IPAddr())
 	err = pinger.Run()
 	if err != nil {
 		return err
 	}
+	return nil
+}
 
-	return err
+func (t *Target) healthMonitor(pinger *probing.Pinger, done chan bool, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	go func() {
+		for {
+			select {
+			case <-done:
+				ticker.Stop()
+				return
+			case <-ticker.C:
+				t.evaluateHealth(pinger.Statistics())
+			}
+		}
+	}()
+}
+
+func (t *Target) evaluateHealth(stats *probing.Statistics) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
+	if stats.PacketLoss >= float64(80) {
+		t.health.consecutiveSuccesses = 0
+		t.health.consecutiveFailure++
+
+		if t.health.consecutiveFailure >= 3 && !t.health.actionRunning {
+			fmt.Println("Run remediation")
+			t.health.actionRunning = true
+		}
+	} else if stats.PacketLoss < float64(20) {
+		t.health.consecutiveFailure = 0
+		t.health.consecutiveSuccesses++
+
+		if t.health.consecutiveSuccesses >= 5 && t.health.actionRunning {
+			fmt.Println("Stop action")
+			t.health.actionRunning = false
+		}
+	}
 }
 
 func ping(host string) {
