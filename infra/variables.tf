@@ -1,3 +1,7 @@
+variable "my_ip" {
+  type = string
+  default = "213.32.243.100/32"
+}
 
 variable "hub_network_cidr" {
   description = "hub network"

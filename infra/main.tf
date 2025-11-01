@@ -34,7 +34,7 @@ resource "aws_security_group" "hub_router" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["213.32.243.100/32"]
+    cidr_blocks = [var.my_ip]
   }
 
   ingress {
@@ -83,7 +83,7 @@ resource "aws_instance" "hub_router" {
   user_data = <<-EOF
     #!/bin/bash
     cat > /tmp/setup-router.sh <<'SCRIPT'
-    ${file("${path.module}/setup-router.sh")}
+    ${file("${path.module}/config/setup-router.sh")}
     SCRIPT
     chmod +x /tmp/setup-router.sh
     /tmp/setup-router.sh hub-router
@@ -111,7 +111,7 @@ resource "aws_security_group" "spoke_1_router" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["213.32.243.100/32"]
+    cidr_blocks = [var.my_ip]
   }
 
   ingress {
@@ -186,7 +186,7 @@ resource "aws_security_group" "spoke_2_router" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["213.32.243.100/32"]
+    cidr_blocks = [var.my_ip]
   }
 
   ingress {
