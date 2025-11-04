@@ -9,6 +9,7 @@ CONFIG_PATH="config"
 DEPLOY_TEMP_DIR=".deploy"
 WIREGUARD_KEY_PATH="$DEPLOY_TEMP_DIR/keys"
 WIREGUARD_CONFIG_PATH="$DEPLOY_TEMP_DIR/config"
+SSH_KEY="bird-key.pem"
 
 if [[ ! -d $DEPLOY_TEMP_DIR ]]; then
   mkdir $DEPLOY_TEMP_DIR
@@ -63,6 +64,19 @@ generate_wg_config() {
     -e "s|HUB_ROUTER_PUBLIC_KEY|$HUB_PUBLIC_KEY|g" \
     -e "s|HUB_ROUTER|$HUB_ROUTER_IP|g" \
     "$CONFIG_PATH/wireguard/spoke-2-wg0.conf" >"$WIREGUARD_CONFIG_PATH/spoke-2-wg0.conf"
+}
+
+generate_bird_config() {
+  
+}
+copy_to_remote() {
+  local server=$1
+  local filename=$2
+  scp -i $SSH_KEY $filename admin@$server:/tmp
+}
+
+setup() {
+
 }
 
 generate_config() {
