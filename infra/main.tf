@@ -30,6 +30,14 @@ resource "aws_security_group" "hub_router" {
   vpc_id      = module.vpc-hub.vpc_id
 
   ingress {
+    description = "ICMP"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [var.my_ip]
+  }
+  
+  ingress {
     description = "SSH"
     from_port   = 22
     to_port     = 22
@@ -107,6 +115,14 @@ resource "aws_security_group" "spoke_1_router" {
   vpc_id      = module.vpc-spoke-1.vpc_id
 
   ingress {
+    description = "ICMP"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [var.my_ip]
+  }
+  
+  ingress {
     description = "SSH"
     from_port   = 22
     to_port     = 22
@@ -181,6 +197,14 @@ resource "aws_security_group" "spoke_2_router" {
   description = "Spoke 2 router security group"
   vpc_id      = module.vpc-spoke-2.vpc_id
 
+  ingress {
+    description = "ICMP"
+    from_port   = -1
+    to_port     = -1
+    protocol    = "icmp"
+    cidr_blocks = [var.my_ip]
+  }
+  
   ingress {
     description = "SSH"
     from_port   = 22
