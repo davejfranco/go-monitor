@@ -1,5 +1,23 @@
+variable "aws_region" {
+  description = "aws region to deploy"
+  type        = string
+  default     = "eu-west-1"
+}
+
+variable "aws_profile" {
+  description = "aws profile to use for authentication"
+  type        = string
+  default     = "personal"
+}
+
+variable "ec2_ami" {
+  description = "EC2 AMI to use for servers"
+  type        = string
+  default     = "ami-0735bf8e58d02fa57"
+}
+
 variable "my_ip" {
-  type = string
+  type    = string
   default = "213.32.243.100/32"
 }
 

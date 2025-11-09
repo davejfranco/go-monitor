@@ -12,6 +12,6 @@ terraform {
 }
 
 provider "aws" {
-  region = "eu-west-1"
-  profile = "personal"
+  region  = var.aws_region
+  profile = var.aws_profile
 }

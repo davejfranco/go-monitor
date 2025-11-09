@@ -1,5 +1,5 @@
 locals {
-  debian12_ami_id = "ami-0735bf8e58d02fa57"
+  debian12_ami_id = var.ec2_ami
 }
 
 resource "tls_private_key" "ssh_key" {
@@ -36,7 +36,7 @@ resource "aws_security_group" "hub_router" {
     protocol    = "icmp"
     cidr_blocks = [var.my_ip]
   }
-  
+
   ingress {
     description = "SSH"
     from_port   = 22
@@ -66,7 +66,7 @@ resource "aws_security_group" "hub_router" {
       var.spoke_2_network_cidr
     ]
   }
-  
+
   egress {
     from_port   = 0
     to_port     = 0
@@ -121,7 +121,7 @@ resource "aws_security_group" "spoke_1_router" {
     protocol    = "icmp"
     cidr_blocks = [var.my_ip]
   }
-  
+
   ingress {
     description = "SSH"
     from_port   = 22
@@ -204,7 +204,7 @@ resource "aws_security_group" "spoke_2_router" {
     protocol    = "icmp"
     cidr_blocks = [var.my_ip]
   }
-  
+
   ingress {
     description = "SSH"
     from_port   = 22
@@ -222,7 +222,7 @@ resource "aws_security_group" "spoke_2_router" {
       var.hub_network_cidr
     ]
   }
-  
+
   ingress {
     description = "Wireguard"
     from_port   = 51820
