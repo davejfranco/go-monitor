@@ -11,12 +11,10 @@ WIREGUARD_KEY_PATH="$DEPLOY_TEMP_DIR/keys"
 WIREGUARD_CONFIG_PATH="$DEPLOY_TEMP_DIR/config"
 SSH_KEY="bird-key.pem"
 
-
 declare -A ROUTERS
 ROUTERS["hub"]="$HUB_ROUTER_IP"
 ROUTERS["spoke-1"]="$SPOKE_1_ROUTER_IP"
 ROUTERS["spoke-2"]="$SPOKE_2_ROUTER_IP"
-
 
 if [[ ! -d $DEPLOY_TEMP_DIR ]]; then
   mkdir $DEPLOY_TEMP_DIR
@@ -69,7 +67,6 @@ generate_wg_config() {
     "$CONFIG_PATH/wireguard/spoke-2-wg0.conf" >"$WIREGUARD_CONFIG_PATH/spoke-2-wg0.conf"
 }
 
-
 copy_to_remote() {
   local server=$1
   shift
@@ -85,11 +82,37 @@ copy_to_remote() {
     "$@" admin@$server:/tmp
 }
 
+setup_remote() {
+  local server=$1
+  local server_name=$2
+
+  ssh -i $SSH_KEY \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    admin@$server <<EOF
+    set -e 
+
+    sudo cp /tmp/nftables.conf /etc/nftable.conf
+    sudo systemctl restart nftables
+
+    sudo cp /tmp/$server_name-wg0.conf /etc/wireguard/wg0.conf
+    sudo systemctl enable wg-quick@wg0
+    sudo systemctl start wg-quick@wg0
+
+    sudo cp /tmp/bird-$server_name.conf /etc/bird/bird.conf
+    sudo systemctl restart bird
+EOF
+}
+
 deploy() {
   for server in "${!ROUTERS[@]}"; do
     echo "Deploying to $server"
     echo "Copying configuration files to servers..."
-    copy_to_remote "${ROUTERS[$server]}" "$CONFIG_PATH/nftable.conf" "$CONFIG_PATH/bird/bird-$server.conf" "$WIREGUARD_CONFIG_PATH/$server-wg0.conf" 
+    copy_to_remote "${ROUTERS[$server]}" "$CONFIG_PATH/nftables.conf" "$CONFIG_PATH/bird/bird-$server.conf" "$WIREGUARD_CONFIG_PATH/$server-wg0.conf"
+
+    echo "Setting up remote servers..."
+    echo "$server..."
+    setup_remote "${ROUTERS[$server]}" "$server"
   done
 }
 
@@ -103,7 +126,7 @@ generate_config() {
 
 clean() {
   read -p "Are you sure you want to remove deployment files? [Y/N]: " answer
-  if [[ "${answer,,}" =~ ^(y|yes)$ ]] then
+  if [[ "${answer,,}" =~ ^(y|yes)$ ]]; then
     echo "Removing $DEPLOY_TEMP_DIR..."
     rm -rf $DEPLOY_TEMP_DIR
     echo "Done..."
@@ -119,6 +142,7 @@ Go monitor deployment script
 
 Usage:
   $0 generate    Generate WireGuard keys and configuration files
+  $0 deploy      Deploy configuration files
   $0 clean       Remove all deployment files
   $0 help        Display this help message
 EOF
