@@ -11,13 +11,16 @@ WIREGUARD_KEY_PATH="$DEPLOY_TEMP_DIR/keys"
 WIREGUARD_CONFIG_PATH="$DEPLOY_TEMP_DIR/config"
 SSH_KEY="bird-key.pem"
 
+
+declare -A ROUTERS
+ROUTERS["hub"]="$HUB_ROUTER_IP"
+ROUTERS["spoke-1"]="$SPOKE_1_ROUTER_IP"
+ROUTERS["spoke-2"]="$SPOKE_2_ROUTER_IP"
+
+
 if [[ ! -d $DEPLOY_TEMP_DIR ]]; then
   mkdir $DEPLOY_TEMP_DIR
 fi
-
-clean() {
-  rm -rf $DEPLOY_TEMP_DIR
-}
 
 wireguard_keys() {
   local server=$1
@@ -66,17 +69,28 @@ generate_wg_config() {
     "$CONFIG_PATH/wireguard/spoke-2-wg0.conf" >"$WIREGUARD_CONFIG_PATH/spoke-2-wg0.conf"
 }
 
-generate_bird_config() {
-  
-}
+
 copy_to_remote() {
   local server=$1
-  local filename=$2
-  scp -i $SSH_KEY $filename admin@$server:/tmp
+  shift
+
+  if [[ $# -eq 0 ]]; then
+    echo "Error: No files specified to copy"
+    return 1
+  fi
+  echo "Copying files to $server:/tmp"
+  scp -i $SSH_KEY \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    "$@" admin@$server:/tmp
 }
 
-setup() {
-
+deploy() {
+  for server in "${!ROUTERS[@]}"; do
+    echo "Deploying to $server"
+    echo "Copying configuration files to servers..."
+    copy_to_remote "${ROUTERS[$server]}" "$CONFIG_PATH/nftable.conf" "$CONFIG_PATH/bird/bird-$server.conf" "$WIREGUARD_CONFIG_PATH/$server-wg0.conf" 
+  done
 }
 
 generate_config() {
@@ -87,17 +101,47 @@ generate_config() {
   generate_wg_config
 }
 
-case $1 in
+clean() {
+  read -p "Are you sure you want to remove deployment files? [Y/N]: " answer
+  if [[ "${answer,,}" =~ ^(y|yes)$ ]] then
+    echo "Removing $DEPLOY_TEMP_DIR..."
+    rm -rf $DEPLOY_TEMP_DIR
+    echo "Done..."
+  else
+    echo "Cancelled."
+    exit 0
+  fi
+}
 
+help() {
+  cat <<EOF
+Go monitor deployment script
+
+Usage:
+  $0 generate    Generate WireGuard keys and configuration files
+  $0 clean       Remove all deployment files
+  $0 help        Display this help message
+EOF
+}
+
+case $1 in
 clean)
   echo -n "cleaning deployment files..."
   clean
   ;;
 generate)
-  echo -n "generating deployment files..."
+  echo "generating deployment files..."
   generate_config
+  ;;
+deploy)
+  echo "Deploying servers"
+  deploy
+  ;;
+help)
+  help
   ;;
 *)
   echo -n "unknown command"
+  help
   ;;
 esac
