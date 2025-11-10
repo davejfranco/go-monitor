@@ -2,6 +2,13 @@
 
 set -euo pipefail
 
+# App
+SRC="../"
+APP_NAME="go-monitor"
+REMOTE_GOOS="linux"
+REMOTE_GOARCH="amd64"
+
+# Server configuration
 HUB_ROUTER_IP=$(terraform output -raw hub_router_public_ip)
 SPOKE_1_ROUTER_IP=$(terraform output -raw spoke_1_router_public_ip)
 SPOKE_2_ROUTER_IP=$(terraform output -raw spoke_2_router_public_ip)
@@ -92,6 +99,8 @@ setup_remote() {
     admin@$server <<EOF
     set -e 
 
+    sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
+
     sudo cp /tmp/nftables.conf /etc/nftable.conf
     sudo systemctl restart nftables
 
@@ -104,7 +113,7 @@ setup_remote() {
 EOF
 }
 
-deploy() {
+config() {
   for server in "${!ROUTERS[@]}"; do
     echo "Deploying to $server"
     echo "Copying configuration files to servers..."
@@ -122,6 +131,35 @@ generate_config() {
   done
 
   generate_wg_config
+}
+
+app_build() {
+  if [[ ! -d $DEPLOY_TEMP_DIR ]]; then
+    echo "Temporary deploy directory does not exist"
+    return
+  fi
+
+  GOOS=$REMOTE_GOOS GOARCH=$REMOTE_GOARCH go build -o $DEPLOY_TEMP_DIR/go-monitor ../main.go
+}
+
+app_deploy() {
+  if [[ ! -f $DEPLOY_TEMP_DIR/go-monitor ]]; then
+    echo "Binary needs to be build first"
+    return
+  fi
+
+  copy_to_remote "${ROUTERS[hub]}" $DEPLOY_TEMP_DIR/go-monitor
+
+  ssh -i $SSH_KEY \
+    -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null \
+    admin@${ROUTERS[hub]} <<EOF
+    set -e 
+
+    sudo sysctl -w net.ipv4.ping_group_range="0 2147483647"
+    sudo cp /tmp/go-monitor /usr/local/bin
+EOF
+
 }
 
 clean() {
@@ -142,7 +180,9 @@ Go monitor deployment script
 
 Usage:
   $0 generate    Generate WireGuard keys and configuration files
-  $0 deploy      Deploy configuration files
+  $0 configure   Configure remote servers
+  $0 build       Build app
+  $0 deploy      Deploy app
   $0 clean       Remove all deployment files
   $0 help        Display this help message
 EOF
@@ -157,9 +197,17 @@ generate)
   echo "generating deployment files..."
   generate_config
   ;;
+build)
+  echo "Build go-monitor"
+  app_build
+  ;;
 deploy)
-  echo "Deploying servers"
-  deploy
+  echo "Deploy go-monitor"
+  app_deploy
+  ;;
+config)
+  echo "Configuring servers"
+  config
   ;;
 help)
   help
